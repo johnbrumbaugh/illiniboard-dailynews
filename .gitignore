@@ -59,5 +59,8 @@ target/
 # Remove Configuration Files From the Repository
 db_config.yml
 
-# Remvoe the Virtual Environment files
+# Remove the Virtual Environment files
 venv/
+
+# Remove the PyCharm Package Files.
+.idea/
