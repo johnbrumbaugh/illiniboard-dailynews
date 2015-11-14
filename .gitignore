@@ -55,3 +55,6 @@ docs/_build/
 
 # PyBuilder
 target/
+
+# Remove Configuration Files From the Repository
+db_config.yml
