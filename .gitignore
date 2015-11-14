@@ -58,3 +58,6 @@ target/
 
 # Remove Configuration Files From the Repository
 db_config.yml
+
+# Remvoe the Virtual Environment files
+venv/
