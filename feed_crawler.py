@@ -9,7 +9,7 @@ class ConfigNotFoundError(Exception): pass
 
 def read_yaml(filename):
     """
-    
+
     :param filename:
     :return:
     """
@@ -126,7 +126,7 @@ db_config = config.get('database').get('development')
 
 print "Database Configuration: %s" % db_config
 
-with open('feed_list_small.txt') as feed_list:
+with open('feed_list.txt') as feed_list:
     feeds = feed_list.readlines()
     feeds = [feed.rstrip('\n') for feed in feeds]
 
