@@ -2,6 +2,7 @@ import feedparser
 import mysql.connector
 import os.path
 import yaml
+from HTMLParser import HTMLParser
 
 
 class ConfigNotFoundError(Exception): pass
@@ -24,6 +25,24 @@ def read_yaml(filename):
     return yaml_doc
 
 
+class MLStripper(HTMLParser):
+    def __init__(self):
+        self.reset()
+        self.fed = []
+
+    def handle_data(self, d):
+        self.fed.append(d)
+
+    def get_data(self):
+        return ''.join(self.fed)
+
+
+def strip_tags(html):
+    s = MLStripper()
+    s.feed(html)
+    return s.get_data()
+
+
 class Article:
     """
     Represents an article that is found within an RSS feed, and includes the functions necessary to determine if this
@@ -31,9 +50,9 @@ class Article:
     necessary to handle the database interactions.
     """
     def __init__(self, title, link, summary, published_date, site_id):
-        self.title = title
+        self.title = strip_tags(title)
         self.link = link
-        self.summary = summary
+        self.summary = strip_tags(summary)
         self.published_date = published_date
         self.site_id = site_id
 
