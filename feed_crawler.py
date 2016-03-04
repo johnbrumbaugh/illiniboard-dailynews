@@ -30,20 +30,19 @@ class Article:
     is a new article, or if this is something that needs to be saved to the database.  It also includes the functions
     necessary to handle the database interactions.
     """
-    def __init__(self, title, link, summary, published_date):
+    def __init__(self, title, link, summary, published_date, site_id):
         self.title = title
         self.link = link
         self.summary = summary
         self.published_date = published_date
+        self.site_id = site_id
 
     def save(self):
-        print "[Article.save] :: invoked."
-
         try:
             db_conn = mysql.connector.connect(**db_config)
             cursor = db_conn.cursor()
-            query = ("INSERT INTO story (link, title, summary, published_date) VALUES (%s, %s, %s, %s)")
-            data_article = (self.link, self.title, self.summary, self.published_date)
+            query = ("INSERT INTO story (link, title, summary, published_date, associated_site) VALUES (%s, %s, %s, %s, %s)")
+            data_article = (self.link, self.title, self.summary, self.published_date, self.site_id)
             cursor.execute(query, data_article)
             return_value = True
         except mysql.connector.Error as error:
@@ -57,8 +56,6 @@ class Article:
         return return_value
 
     def exists(self):
-        print "[exists] :: invoked."
-
         try:
             db_conn = mysql.connector.connect(**db_config)
             cursor = db_conn.cursor()
@@ -81,43 +78,28 @@ class Article:
         return return_value
 
 
-def process_feed(feed_url):
+def process_feed(feed_url, site_id):
     """
     Takes in the URL of an RSS feed and leverages the feedparser API to pull down the data and sub-functions to
     actually save the new stories into the central Daily News database table.
     :param feed_url: The URL of the RSS feed.
-    :return: None.
+    :param site_id: The ID of the site which will be added to the Article when saved in the database.
+    :rtype: (int, int)
+    :return
+        feed_list_size: The size of the full article list in the feed
+        saved_count: The count of articles actually saved.
     """
-    print "[process_feed] :: invoked, feed=%s" % feed_url
     feed_contents = feedparser.parse(feed_url)
-    try:
-        feed_title = feed_contents.feed.title
-    except AttributeError as ae:
-        print "[process_feed] :: AttributeError found=%s" % ae
-        feed_title = feed_url
-
-    print "[process_feed] :: Processing Feed {%s} ... " % feed_title
-    process_entries(feed_contents.entries)
-    return None
-
-
-def process_entries(feed_entries):
-    """
-    Handles the parsing of a specific entry within a feed, converting it into an article object, and then using a
-    sub-function to determine whether or not the article should be saved into the Daily News Database.
-    :param feed_entries:
-    :return:
-    """
-    print "[process_entries] :: invoked, entries={%d}" % len(feed_entries)
-    for entry in feed_entries:
-        article = Article(entry.title, entry.link, entry.description, entry.published_parsed)
+    feed_list_size = len(feed_contents.entries)
+    saved_count = 0
+    for entry in feed_contents.entries:
+        article = Article(entry.title, entry.link, entry.description, entry.published_parsed, site_id)
         does_exist = article.exists()
         if not does_exist:
             article.save()
-        else:
-            print "[process_entries] :: Article with link {%s} exists already, skipping." % article.link
-    return None
+            saved_count += 1
 
+    return feed_list_size, saved_count
 
 print "IlliniBoard.com Daily News Feed Crawler Starting Up ..."
 
@@ -126,9 +108,20 @@ db_config = config.get('database').get('development')
 
 print "Database Configuration: %s" % db_config
 
-with open('feed_list.txt') as feed_list:
-    feeds = feed_list.readlines()
-    feeds = [feed.rstrip('\n') for feed in feeds]
+try:
+    db_conn = mysql.connector.connect(**db_config)
+    cursor = db_conn.cursor()
+    query = "SELECT * FROM daily_news_site_list"
+    cursor.execute(query)
 
-for url in feeds:
-    process_feed(url)
+    for (site_id, site_name, feed_url) in cursor:
+        print "Processing %s at %s" % ( site_name, feed_url)
+        feed_status = process_feed(feed_url, site_id)
+        print "Processed %d articles, saved %d." % ( feed_status[0], feed_status[1])
+
+except mysql.connector.Error as error:
+        print "error number=%s" % error.errno
+        print "error=%s" % error
+
+else:
+    db_conn.close()
