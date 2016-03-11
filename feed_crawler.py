@@ -1,7 +1,5 @@
-import feedparser
-import mysql.connector
-import os.path
-import yaml
+import feedparser, opengraph, mysql.connector, os.path, yaml
+from util.amazon_s3 import download_image, upload_file_to_s3
 from HTMLParser import HTMLParser
 
 
@@ -49,19 +47,31 @@ class Article:
     is a new article, or if this is something that needs to be saved to the database.  It also includes the functions
     necessary to handle the database interactions.
     """
-    def __init__(self, title, link, summary, published_date, site_id):
+    def __init__(self, title, link, summary, published_date, site_id, image_url=""):
         self.title = strip_tags(title)
         self.link = link
         self.summary = strip_tags(summary)
         self.published_date = published_date
         self.site_id = site_id
 
+        # Use the Open Graph to pull what the site actually wants as the description and the image.
+        open_graph_data = opengraph.OpenGraph(url=self.link)
+        if open_graph_data.is_valid():
+            if open_graph_data.get('description'):
+                self.summary = open_graph_data.get('description')
+
+            if open_graph_data.get('image'):
+                self.image_url = open_graph_data.get('image')
+        else:
+            self.image_url = image_url
+
     def save(self):
         try:
             db_conn = mysql.connector.connect(**db_config)
             cursor = db_conn.cursor()
-            query = ("INSERT INTO story (link, title, summary, published_date, associated_site) VALUES (%s, %s, %s, %s, %s)")
-            data_article = (self.link, self.title, self.summary, self.published_date, self.site_id)
+            query = ("INSERT INTO story (link, title, summary, published_date, associated_site, thumbnail_image_url) \
+                        VALUES (%s, %s, %s, %s, %s, %s)")
+            data_article = (self.link, self.title, self.summary, self.published_date, self.site_id, self.image_url)
             cursor.execute(query, data_article)
             return_value = True
         except mysql.connector.Error as error:
@@ -96,6 +106,19 @@ class Article:
 
         return return_value
 
+    def save_image_to_s3(self):
+        """
+        Downloads an image based on the URL within the Article to the local system and then saves it into the
+        S3 Bucket set up for the account.
+        :return: s3_file_name: The file name of the image.
+        """
+        # TODO: Handle exceptions in the Download / Upload Process
+        local_file_path = download_image(self.image_url)
+        s3_file_name = ""
+        if not local_file_path == '':
+            s3_file_name = upload_file_to_s3(local_file_path)
+        return s3_file_name
+
 
 def process_feed(feed_url, site_id):
     """
@@ -108,6 +131,7 @@ def process_feed(feed_url, site_id):
         feed_list_size: The size of the full article list in the feed
         saved_count: The count of articles actually saved.
     """
+    print "[process_feed] :: url=%s" % feed_url
     feed_contents = feedparser.parse(feed_url)
     feed_list_size = len(feed_contents.entries)
     saved_count = 0
@@ -115,6 +139,7 @@ def process_feed(feed_url, site_id):
         article = Article(entry.title, entry.link, entry.description, entry.published_parsed, site_id)
         does_exist = article.exists()
         if not does_exist:
+            article.image_url = article.save_image_to_s3()
             article.save()
             saved_count += 1
 
@@ -122,7 +147,7 @@ def process_feed(feed_url, site_id):
 
 print "IlliniBoard.com Daily News Feed Crawler Starting Up ..."
 
-config = read_yaml('db_config.yml')
+config = read_yaml('config.yml')
 db_config = config.get('database').get('development')
 
 print "Database Configuration: %s" % db_config
@@ -133,10 +158,10 @@ try:
     query = "SELECT * FROM daily_news_site_list"
     cursor.execute(query)
 
-    for (site_id, site_name, feed_url) in cursor:
-        print "Processing %s at %s" % ( site_name, feed_url)
-        feed_status = process_feed(feed_url, site_id)
-        print "Processed %d articles, saved %d." % ( feed_status[0], feed_status[1])
+    for (site_id, url, site_name) in cursor:
+        print "Processing %s at %s" % (site_name, url)
+        feed_status = process_feed(url, site_id)
+        print "Processed %d articles, saved %d." % (feed_status[0], feed_status[1])
 
 except mysql.connector.Error as error:
         print "error number=%s" % error.errno

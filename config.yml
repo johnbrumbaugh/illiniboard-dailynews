@@ -1,0 +1,14 @@
+database:
+  development:
+    user: 'illiniboard'
+    password: 'j0hnGr0c3'
+    database: 'illiniboard'
+    raise_on_warnings: True
+    host: 'mysql.illiniboard.com'
+amazon:
+  s3:
+    bucket_name: 'illiniboard-development'
+    url: 'https://s3.amazonaws.com/'
+local:
+  file:
+    image_download_location: '/Users/johnbrumbaugh/illiniboard/illiniboard-dailynews/downloads/%s'
