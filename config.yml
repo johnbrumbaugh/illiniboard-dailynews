@@ -12,3 +12,5 @@ amazon:
 local:
   file:
     image_download_location: '/Users/johnbrumbaugh/illiniboard/illiniboard-dailynews/downloads/%s'
+image:
+  thumbnail_size: 128, 128

@@ -1,6 +1,7 @@
 import feedparser, opengraph, mysql.connector, os.path, yaml
 from util.amazon_s3 import download_image, upload_file_to_s3
 from HTMLParser import HTMLParser
+from PIL import Image
 
 
 class ConfigNotFoundError(Exception): pass
@@ -21,6 +22,9 @@ def read_yaml(filename):
         yaml_doc = yaml.load(f)
 
     return yaml_doc
+
+config = read_yaml('config.yml')
+db_config = config.get('database').get('development')
 
 
 class MLStripper(HTMLParser):
@@ -108,16 +112,26 @@ class Article:
 
     def save_image_to_s3(self):
         """
-        Downloads an image based on the URL within the Article to the local system and then saves it into the
-        S3 Bucket set up for the account.
+        Downloads an image based on the URL within the Article to the local system, turns it into a thumbnail image
+        and then saves it into the S3 Bucket set up for the account.
         :return: s3_file_name: The file name of the image.
         """
         # TODO: Handle exceptions in the Download / Upload Process
         local_file_path = download_image(self.image_url)
+        if not local_file_path == '':
+            thumbnail_file, extension = os.path.splitext(local_file_path)
+            print "[generate_thumbnail] :: local_file_path, extension=[%s, %s]" % (thumbnail_file, extension)
+            img = Image.open(local_file_path)
+            img_size = 400, 400
+            img.thumbnail(img_size)
+            img.save(thumbnail_file + ".thumbnail" + extension, "JPEG", quality=90)
+            local_file_path = thumbnail_file + ".thumbnail" + extension
         s3_file_name = ""
         if not local_file_path == '':
             s3_file_name = upload_file_to_s3(local_file_path)
-        return s3_file_name
+
+        self.image_url = s3_file_name
+        return None
 
 
 def process_feed(feed_url, site_id):
@@ -139,16 +153,13 @@ def process_feed(feed_url, site_id):
         article = Article(entry.title, entry.link, entry.description, entry.published_parsed, site_id)
         does_exist = article.exists()
         if not does_exist:
-            article.image_url = article.save_image_to_s3()
+            article.save_image_to_s3()
             article.save()
             saved_count += 1
 
     return feed_list_size, saved_count
 
 print "IlliniBoard.com Daily News Feed Crawler Starting Up ..."
-
-config = read_yaml('config.yml')
-db_config = config.get('database').get('development')
 
 print "Database Configuration: %s" % db_config
 

@@ -65,3 +65,6 @@ venv/
 
 # Remove the PyCharm Package Files.
 .idea/
+
+# Remove the Downloads Directory
+downloads/
