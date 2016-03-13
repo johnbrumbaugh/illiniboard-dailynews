@@ -1,0 +1,14 @@
+database:
+        development: 
+                user: 'USER_NAME'
+                password: 'PASSWRD'
+                database: 'DB_NAME'
+                raise_on_warnings: True
+                host: 'DB_HST'
+amazon:
+        s3:
+                bucket_name: 'BUCKET_NAME'
+                url: 'https://s3.amazonaws.com/'
+local:
+        file:
+                image_download_location: 'LCATIN/%s'
