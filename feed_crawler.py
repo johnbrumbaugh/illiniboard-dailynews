@@ -25,6 +25,20 @@ def read_yaml(filename):
 
 config = read_yaml('config.yml')
 db_config = config.get('database').get('development')
+db_conn = mysql.connector.connect(**db_config)
+keyword_list = []
+
+try:
+    keyword_cursor = db_conn.cursor()
+    keyword_query = "SELECT * FROM daily_news_keywords"
+    keyword_cursor.execute(keyword_query)
+
+    for (keyword_id, keyword) in keyword_cursor:
+        keyword_list.append(keyword)
+
+except mysql.connector.Error as error:
+    print "error number=%s" % error.errno
+    print "error=%s" % error
 
 
 class MLStripper(HTMLParser):
@@ -59,6 +73,7 @@ class Article:
         self.site_id = site_id
 
         # Use the Open Graph to pull what the site actually wants as the description and the image.
+        # TODO: Handle the error from Rivals.com which is giving me a 403 when checking for opengraph data.
         open_graph_data = opengraph.OpenGraph(url=self.link)
         if open_graph_data.is_valid():
             if open_graph_data.get('description'):
@@ -110,6 +125,12 @@ class Article:
 
         return return_value
 
+    def is_valid(self):
+        for key in keyword_list:
+            if key in self.title or key in self.summary:
+                return True
+        return False
+
     def save_image_to_s3(self):
         """
         Downloads an image based on the URL within the Article to the local system, turns it into a thumbnail image
@@ -151,20 +172,21 @@ def process_feed(feed_url, site_id):
     saved_count = 0
     for entry in feed_contents.entries:
         article = Article(entry.title, entry.link, entry.description, entry.published_parsed, site_id)
-        does_exist = article.exists()
-        if not does_exist:
-            article.save_image_to_s3()
-            article.save()
-            saved_count += 1
+        if article.is_valid():
+            if not article.exists():
+                article.save_image_to_s3()
+                article.save()
+                saved_count += 1
+        else:
+            print "[process_feed] :: Article {%s} is invalid, not saving it." % article.title
 
     return feed_list_size, saved_count
 
 print "IlliniBoard.com Daily News Feed Crawler Starting Up ..."
-
 print "Database Configuration: %s" % db_config
+print "Keyword List: %s" % keyword_list
 
 try:
-    db_conn = mysql.connector.connect(**db_config)
     cursor = db_conn.cursor()
     query = "SELECT * FROM daily_news_site_list"
     cursor.execute(query)
