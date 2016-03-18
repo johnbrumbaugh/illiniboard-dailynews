@@ -1,4 +1,4 @@
-import feedparser, opengraph, mysql.connector, os.path, yaml
+import feedparser, opengraph, pymysql, os.path, yaml
 from util.amazon_s3 import download_image, upload_file_to_s3
 from HTMLParser import HTMLParser
 from PIL import Image
@@ -23,9 +23,18 @@ def read_yaml(filename):
 
     return yaml_doc
 
+
 config = read_yaml('config.yml')
 db_config = config.get('database').get('development')
-db_conn = mysql.connector.connect(**db_config)
+
+
+def get_db_connection():
+    return pymysql.connect(host=db_config.get('host'),
+                           user=db_config.get('user'),
+                           password=db_config.get('password'),
+                           db=db_config.get('db'))
+
+db_conn = get_db_connection()
 keyword_list = []
 
 try:
@@ -36,7 +45,7 @@ try:
     for (keyword_id, keyword) in keyword_cursor:
         keyword_list.append(keyword)
 
-except mysql.connector.Error as error:
+except pymysql.Error as error:
     print "error number=%s" % error.errno
     print "error=%s" % error
 
@@ -86,14 +95,14 @@ class Article:
 
     def save(self):
         try:
-            db_conn = mysql.connector.connect(**db_config)
+            db_conn = get_db_connection()
             cursor = db_conn.cursor()
             query = ("INSERT INTO story (link, title, summary, published_date, associated_site, thumbnail_image_url) \
                         VALUES (%s, %s, %s, %s, %s, %s)")
             data_article = (self.link, self.title, self.summary, self.published_date, self.site_id, self.image_url)
             cursor.execute(query, data_article)
             return_value = True
-        except mysql.connector.Error as error:
+        except pymysql.Error as error:
             print "[save] :: error number=%s" % error.errno
             print "[save] :: error=%s" % error
             return_value = False
@@ -105,7 +114,7 @@ class Article:
 
     def exists(self):
         try:
-            db_conn = mysql.connector.connect(**db_config)
+            db_conn = get_db_connection()
             cursor = db_conn.cursor()
             query = "SELECT id FROM story WHERE link='%s'" % self.link
             cursor.execute(query)
@@ -116,7 +125,7 @@ class Article:
             else:
                 return_value = False
 
-        except mysql.connector.Error as error:
+        except pymysql.Error as error:
             print "[exists] :: error number=%s" % error.errno
             print "[exists] :: error=%s" % error
             return_value = False
@@ -155,30 +164,37 @@ class Article:
         return None
 
 
-def process_feed(feed_url, site_id):
+def process_feed(feed_url, site_id, validate_site):
     """
     Takes in the URL of an RSS feed and leverages the feedparser API to pull down the data and sub-functions to
     actually save the new stories into the central Daily News database table.
     :param feed_url: The URL of the RSS feed.
     :param site_id: The ID of the site which will be added to the Article when saved in the database.
+    :param validate_site: true / false?
     :rtype: (int, int)
     :return
         feed_list_size: The size of the full article list in the feed
         saved_count: The count of articles actually saved.
     """
-    print "[process_feed] :: url=%s" % feed_url
+    print "[process_feed] :: url=%s, validate_site=[%s]" % (feed_url, validate_site)
     feed_contents = feedparser.parse(feed_url)
     feed_list_size = len(feed_contents.entries)
     saved_count = 0
     for entry in feed_contents.entries:
         article = Article(entry.title, entry.link, entry.description, entry.published_parsed, site_id)
-        if article.is_valid():
+        if validate_site == 'Y':
+            if article.is_valid():
+                if not article.exists():
+                    article.save_image_to_s3()
+                    article.save()
+                    saved_count += 1
+            else:
+                print "[process_feed] :: Article {%s} is invalid, not saving it." % article.title
+        else:
             if not article.exists():
                 article.save_image_to_s3()
                 article.save()
                 saved_count += 1
-        else:
-            print "[process_feed] :: Article {%s} is invalid, not saving it." % article.title
 
     return feed_list_size, saved_count
 
@@ -191,12 +207,12 @@ try:
     query = "SELECT * FROM daily_news_site_list"
     cursor.execute(query)
 
-    for (site_id, url, site_name) in cursor:
+    for (site_id, url, site_name, validate_site) in cursor:
         print "Processing %s at %s" % (site_name, url)
-        feed_status = process_feed(url, site_id)
+        feed_status = process_feed(url, site_id, validate_site)
         print "Processed %d articles, saved %d." % (feed_status[0], feed_status[1])
 
-except mysql.connector.Error as error:
+except pymysql.Error as error:
         print "error number=%s" % error.errno
         print "error=%s" % error
 
