@@ -14,29 +14,35 @@ def get_bucket_url():
     return bucket_url
 
 
-def download_image(image_url):
+def download_image(image_url, link=""):
     """
     Downloads the image from a specified URL, saves it into the generic downloads folder, and will then provide back
     the full file location as to where the image is on the local machine.
     :param image_url:
+    :param link:
     :return:
     """
     print "[download_image] :: invoked, image_url=%s" % image_url
     parsed_url = urlparse(image_url)
     if parsed_url.netloc == '':
         print "[download_image] :: Skipping Image Download as URL doesn't point to a remote location."
-        return ""
-    else:
-        save_location = config.get('local').get('file').get('image_download_location') % image_url.split('/')[-1]
-        file_location, headers = urllib.urlretrieve(image_url, save_location)
-        content_type = headers.get('Content-Type')
-        if content_type == 'image/jpeg':
-            if (".jpg" or ".jpeg") not in file_location:
-                new_location = "%s.jpg" % file_location
-                print "[download_image] :: renaming file to %s" % new_location
-                rename(file_location, new_location)
-                file_location = new_location
-        return file_location
+        parsed_link = urlparse(link)
+        if parsed_link.netloc == '':
+            return ""
+        else:
+            image_url = "%s://%s%s" % (parsed_link.scheme, parsed_link.netloc, image_url)
+            print "[download_image] :: Changed the image_url to %s" % image_url
+
+    save_location = config.get('local').get('file').get('image_download_location') % image_url.split('/')[-1]
+    file_location, headers = urllib.urlretrieve(image_url, save_location)
+    content_type = headers.get('Content-Type')
+    if content_type == 'image/jpeg':
+        if (".jpg" or ".jpeg") not in file_location:
+            new_location = "%s.jpg" % file_location
+            print "[download_image] :: renaming file to %s" % new_location
+            rename(file_location, new_location)
+            file_location = new_location
+    return file_location
 
 
 def upload_file_to_s3(file_path, file_name=None):

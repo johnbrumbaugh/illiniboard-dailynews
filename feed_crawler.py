@@ -83,7 +83,6 @@ class Article:
         self.site_id = site_id
 
         # Use the Open Graph to pull what the site actually wants as the description and the image.
-        # TODO: Handle the error from Rivals.com which is giving me a 403 when checking for opengraph data.
         try:
             open_graph_data = opengraph.OpenGraph(url=self.link)
             if open_graph_data.is_valid():
@@ -98,6 +97,7 @@ class Article:
             self.image_url = image_url
             print "[__init__] :: getting opengraph error {%s}" % open_graph_error
         except URLError as open_graph_error:
+            self.image_url = image_url
             print "[__init__] :: getting opengraph error {%s}" % open_graph_error
 
     def save(self):
@@ -156,7 +156,7 @@ class Article:
             return None
 
         # TODO: Handle exceptions in the Download / Upload Process
-        local_file_path = download_image(self.image_url)
+        local_file_path = download_image(self.image_url, self.link)
         if not local_file_path == '':
             thumbnail_file, extension = os.path.splitext(local_file_path)
             print "[generate_thumbnail] :: local_file_path, extension=[%s, %s]" % (thumbnail_file, extension)
