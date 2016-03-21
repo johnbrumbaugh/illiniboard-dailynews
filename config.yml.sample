@@ -2,7 +2,7 @@ database:
         development: 
                 user: 'USER_NAME'
                 password: 'PASSWRD'
-                database: 'DB_NAME'
+                db: 'DB_NAME'
                 raise_on_warnings: True
                 host: 'DB_HST'
 amazon:

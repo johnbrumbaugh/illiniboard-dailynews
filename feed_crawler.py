@@ -1,5 +1,6 @@
 import feedparser, opengraph, pymysql, os.path, yaml
 from util.amazon_s3 import download_image, upload_file_to_s3
+from urllib2 import HTTPError, URLError
 from HTMLParser import HTMLParser
 from PIL import Image
 
@@ -46,7 +47,7 @@ try:
         keyword_list.append(keyword)
 
 except pymysql.Error as error:
-    print "error number=%s" % error.errno
+    # print "error number=%s" % error.errno
     print "error=%s" % error
 
 
@@ -75,23 +76,29 @@ class Article:
     necessary to handle the database interactions.
     """
     def __init__(self, title, link, summary, published_date, site_id, image_url=""):
-        self.title = strip_tags(title)
+        self.title = strip_tags(title).encode("utf-8")
         self.link = link
-        self.summary = strip_tags(summary)
+        self.summary = strip_tags(summary).encode("utf-8")
         self.published_date = published_date
         self.site_id = site_id
 
         # Use the Open Graph to pull what the site actually wants as the description and the image.
         # TODO: Handle the error from Rivals.com which is giving me a 403 when checking for opengraph data.
-        open_graph_data = opengraph.OpenGraph(url=self.link)
-        if open_graph_data.is_valid():
-            if open_graph_data.get('description'):
-                self.summary = open_graph_data.get('description')
+        try:
+            open_graph_data = opengraph.OpenGraph(url=self.link)
+            if open_graph_data.is_valid():
+                if open_graph_data.get('description'):
+                    self.summary = open_graph_data.get('description').encode("utf-8")
 
-            if open_graph_data.get('image'):
-                self.image_url = open_graph_data.get('image')
-        else:
+                if open_graph_data.get('image'):
+                    self.image_url = open_graph_data.get('image')
+            else:
+                self.image_url = image_url
+        except HTTPError as open_graph_error:
             self.image_url = image_url
+            print "[__init__] :: getting opengraph error {%s}" % open_graph_error
+        except URLError as open_graph_error:
+            print "[__init__] :: getting opengraph error {%s}" % open_graph_error
 
     def save(self):
         try:
@@ -103,7 +110,6 @@ class Article:
             cursor.execute(query, data_article)
             return_value = True
         except pymysql.Error as error:
-            print "[save] :: error number=%s" % error.errno
             print "[save] :: error=%s" % error
             return_value = False
         else:
@@ -146,6 +152,9 @@ class Article:
         and then saves it into the S3 Bucket set up for the account.
         :return: s3_file_name: The file name of the image.
         """
+        if not self.image_url:
+            return None
+
         # TODO: Handle exceptions in the Download / Upload Process
         local_file_path = download_image(self.image_url)
         if not local_file_path == '':
