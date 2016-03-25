@@ -33,7 +33,8 @@ def get_db_connection():
     return pymysql.connect(host=db_config.get('host'),
                            user=db_config.get('user'),
                            password=db_config.get('password'),
-                           db=db_config.get('db'))
+                           db=db_config.get('db'),
+                           charset='utf8')
 
 db_conn = get_db_connection()
 keyword_list = []
@@ -76,9 +77,9 @@ class Article:
     necessary to handle the database interactions.
     """
     def __init__(self, title, link, summary, published_date, site_id, image_url=""):
-        self.title = strip_tags(title).encode("utf-8")
+        self.title = strip_tags(title)
         self.link = link
-        self.summary = strip_tags(summary).encode("utf-8")
+        self.summary = strip_tags(summary)
         self.published_date = published_date
         self.site_id = site_id
 
@@ -87,7 +88,7 @@ class Article:
             open_graph_data = opengraph.OpenGraph(url=self.link)
             if open_graph_data.is_valid():
                 if open_graph_data.get('description'):
-                    self.summary = open_graph_data.get('description').encode("utf-8")
+                    self.summary = open_graph_data.get('description')
 
                 if open_graph_data.get('image'):
                     self.image_url = open_graph_data.get('image')
