@@ -34,7 +34,7 @@ def download_image(image_url, link=""):
             print "[download_image] :: Changed the image_url to %s" % image_url
 
     save_location = config.get('local').get('file').get('image_download_location') % image_url.split('/')[-1]
-    file_location, headers = urllib.urlretrieve(image_url, save_location)
+    file_location, headers = urllib.urlretrieve(image_url, save_location.split('?', 1)[0])
     content_type = headers.get('Content-Type')
     if content_type == 'image/jpeg':
         if (".jpg" or ".jpeg") not in file_location:
